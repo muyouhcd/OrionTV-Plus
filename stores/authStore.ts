@@ -17,6 +17,18 @@ interface AuthState {
   logout: () => Promise<void>;
 }
 
+const trySavedCredentialsLogin = async () => {
+  const savedCredentials = await LoginCredentialsManager.get();
+  if (!savedCredentials?.password) {
+    return false;
+  }
+
+  const username = (savedCredentials.username || "").trim();
+  const password = savedCredentials.password;
+  const loginResult = await api.login(username || undefined, password).catch(() => null);
+  return !!loginResult?.ok;
+};
+
 const useAuthStore = create<AuthState>((set) => ({
   isLoggedIn: false,
   isLoginModalVisible: false,
@@ -69,14 +81,9 @@ const useAuthStore = create<AuthState>((set) => ({
           }
         } else {
           // Try auto-login with saved credentials first.
-          const savedCredentials = await LoginCredentialsManager.get();
-          if (savedCredentials?.password) {
-            const loginResult = await api.login(savedCredentials.username, savedCredentials.password).catch(() => null);
-            if (loginResult?.ok) {
-              set({ isLoggedIn: true, isLoginModalVisible: false });
-            } else {
-              set({ isLoggedIn: false, isLoginModalVisible: true });
-            }
+          const autoLoginOk = await trySavedCredentialsLogin();
+          if (autoLoginOk) {
+            set({ isLoggedIn: true, isLoginModalVisible: false });
           } else {
             set({ isLoggedIn: false, isLoginModalVisible: true });
           }
@@ -87,7 +94,13 @@ const useAuthStore = create<AuthState>((set) => ({
     } catch (error) {
       logger.error("Failed to check login status:", error);
       if (error instanceof Error && error.message === "UNAUTHORIZED") {
-        set({ isLoggedIn: false, isLoginModalVisible: true });
+        // Cookie may be expired, fallback to saved credentials auto-login.
+        const autoLoginOk = await trySavedCredentialsLogin();
+        if (autoLoginOk) {
+          set({ isLoggedIn: true, isLoginModalVisible: false });
+        } else {
+          set({ isLoggedIn: false, isLoginModalVisible: true });
+        }
       } else {
         set({ isLoggedIn: false });
       }

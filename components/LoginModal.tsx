@@ -80,18 +80,19 @@ const LoginModal = () => {
 
   const handleLogin = async () => {
     const isLocalStorage = serverConfig?.StorageType === "localstorage";
-    if (!password || (!isLocalStorage && !username)) {
+    const normalizedUsername = username.trim();
+    if (!password || (!isLocalStorage && !normalizedUsername)) {
       Toast.show({ type: "error", text1: "请输入用户名和密码" });
       return;
     }
     setIsLoading(true);
     try {
-      await api.login(isLocalStorage ? undefined : username, password);
+      await api.login(isLocalStorage ? undefined : normalizedUsername, password);
       await checkLoginStatus(apiBaseUrl);
       await refreshPlayRecords();
 
       // Save credentials on successful login
-      await LoginCredentialsManager.save({ username, password });
+      await LoginCredentialsManager.save({ username: normalizedUsername, password });
 
       Toast.show({ type: "success", text1: "登录成功" });
       // hideLoginModal();
