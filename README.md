@@ -116,3 +116,5 @@ This repository is based on the original project:
 本项目 **OrionTV-Plus** 基于原版项目二次开发：
 - 原版仓库（Upstream）：https://github.com/orion-lib/OrionTV
 - 本仓库在原版基础上进行功能增强与适配优化（如播放内核切换、播放源切换、历史合并、自动登录与一键打包）。
+
+For a clean upstream attribution note, see: [UPSTREAM_ATTRIBUTION.md](./UPSTREAM_ATTRIBUTION.md)
