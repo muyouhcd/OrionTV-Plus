@@ -29,6 +29,8 @@ export const useVideoHandlers = ({
   const wasBufferingRef = useRef(false);
   const bufferingStartAtRef = useRef<number | null>(null);
   const isResyncingRef = useRef(false);
+  const bufferingEventsRef = useRef<number[]>([]);
+  const isAutoSwitchingRef = useRef(false);
   const onLoad = useCallback(async () => {
     console.info('[PERF] Video onLoad - video ready to play');
 
@@ -59,6 +61,8 @@ export const useVideoHandlers = ({
     wasBufferingRef.current = false;
     bufferingStartAtRef.current = null;
     isResyncingRef.current = false;
+    bufferingEventsRef.current = [];
+    isAutoSwitchingRef.current = false;
   }, [currentEpisode?.url]);
 
   const wrappedPlaybackStatusUpdate = useCallback(
@@ -73,6 +77,10 @@ export const useVideoHandlers = ({
           wasBufferingRef.current = false;
           const bufferingDuration = bufferingStartAtRef.current ? Date.now() - bufferingStartAtRef.current : 0;
           bufferingStartAtRef.current = null;
+          const now = Date.now();
+          bufferingEventsRef.current.push(now);
+          // Keep only recent 90 seconds events for stutter detection.
+          bufferingEventsRef.current = bufferingEventsRef.current.filter((t) => now - t <= 90_000);
 
           // For some Android TV devices, a long buffering recovery may leave A/V drift.
           // Seeking to current position forces native pipeline re-sync.
@@ -86,6 +94,19 @@ export const useVideoHandlers = ({
             } finally {
               isResyncingRef.current = false;
             }
+          }
+
+          // Proactively switch to another source when playback is clearly unstable.
+          // Goal: smoother playback over sharpness when current source keeps stalling.
+          const tooManyStutters = bufferingEventsRef.current.length >= 3;
+          const veryLongBuffer = bufferingDuration >= 6000;
+          if ((tooManyStutters || veryLongBuffer) && !isAutoSwitchingRef.current && currentEpisode?.url) {
+            isAutoSwitchingRef.current = true;
+            Toast.show({
+              type: 'info',
+              text1: '检测到播放不稳定，正在自动切换更流畅线路',
+            });
+            usePlayerStore.getState().handleVideoError('network', currentEpisode.url);
           }
         }
       }
