@@ -25,16 +25,21 @@ const config = getDefaultConfig(projectRoot);
 //   config.resolver.sourceExts = tvSourceExts;
 // }
 
-// This can be replaced with `find-yarn-workspace-root`
-const monorepoRoot = path.resolve(projectRoot, "../..");
-
-// 1. Watch all files within the monorepo
-config.watchFolders = [monorepoRoot];
-// 2. Let Metro know where to resolve packages and in what order
-config.resolver.nodeModulesPaths = [
-  path.resolve(projectRoot, "node_modules"),
-  path.resolve(monorepoRoot, "node_modules"),
-];
-config.resolver.disableHierarchicalLookup = true;
+// Default to single-project mode to avoid scanning huge files outside this repo.
+// Set USE_MONOREPO_METRO=1 only if you explicitly need monorepo resolution.
+const useMonorepoMetro = process.env.USE_MONOREPO_METRO === "1";
+if (useMonorepoMetro) {
+  const monorepoRoot = path.resolve(projectRoot, "../..");
+  config.watchFolders = [monorepoRoot];
+  config.resolver.nodeModulesPaths = [
+    path.resolve(projectRoot, "node_modules"),
+    path.resolve(monorepoRoot, "node_modules"),
+  ];
+  config.resolver.disableHierarchicalLookup = true;
+} else {
+  config.watchFolders = [projectRoot];
+  config.resolver.nodeModulesPaths = [path.resolve(projectRoot, "node_modules")];
+  config.resolver.disableHierarchicalLookup = false;
+}
 
 module.exports = config;

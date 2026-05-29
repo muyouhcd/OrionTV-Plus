@@ -1,0 +1,70 @@
+﻿import React from "react";
+import { View, StyleSheet } from "react-native";
+import { ThemedText } from "@/components/ThemedText";
+import { SettingsSection } from "./SettingsSection";
+import { StyledButton } from "@/components/StyledButton";
+import { useSettingsStore } from "@/stores/settingsStore";
+import Toast from "react-native-toast-message";
+
+interface PlaybackEngineSectionProps {
+  onChanged: () => void;
+}
+
+export const PlaybackEngineSection: React.FC<PlaybackEngineSectionProps> = ({ onChanged }) => {
+  const { playerBackend, setAndSavePlayerBackend } = useSettingsStore();
+
+  const setBackend = async (backend: "auto" | "mediaplayer") => {
+    await setAndSavePlayerBackend(backend);
+    onChanged();
+    Toast.show({
+      type: "success",
+      text1: `已切换到 ${backend === "mediaplayer" ? "MediaPlayer" : "ExoPlayer"}`,
+      text2: "进入播放页可看到当前内核状态",
+    });
+  };
+
+  return (
+    <SettingsSection>
+      <ThemedText style={styles.title}>播放器内核</ThemedText>
+      <ThemedText style={styles.subtitle}>
+        当前: {playerBackend === "mediaplayer" ? "MediaPlayer" : "ExoPlayer"}
+      </ThemedText>
+      <View style={styles.row}>
+        <StyledButton
+          text="自动 (ExoPlayer)"
+          variant={playerBackend === "auto" ? "primary" : "default"}
+          onPress={() => setBackend("auto")}
+          style={styles.button}
+        />
+        <StyledButton
+          text="MediaPlayer"
+          variant={playerBackend === "mediaplayer" ? "primary" : "default"}
+          onPress={() => setBackend("mediaplayer")}
+          style={styles.button}
+        />
+      </View>
+    </SettingsSection>
+  );
+};
+
+const styles = StyleSheet.create({
+  title: {
+    fontSize: 16,
+    fontWeight: "bold",
+    marginBottom: 8,
+  },
+  subtitle: {
+    fontSize: 12,
+    color: "#999",
+    marginBottom: 12,
+    lineHeight: 18,
+  },
+  row: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 10,
+  },
+  button: {
+    minWidth: 160,
+  },
+});

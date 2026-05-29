@@ -1,19 +1,33 @@
 import React from "react";
-import { View, Text, StyleSheet, Pressable } from "react-native";
-import { Pause, Play, SkipForward, List, Tv, ArrowDownToDot, ArrowUpFromDot, Gauge } from "lucide-react-native";
+import { View, Text, StyleSheet, Platform, Linking } from "react-native";
+import {
+  Pause,
+  Play,
+  SkipForward,
+  List,
+  Tv,
+  ArrowDownToDot,
+  ArrowUpFromDot,
+  Gauge,
+  ExternalLink,
+  Cpu,
+} from "lucide-react-native";
 import { ThemedText } from "@/components/ThemedText";
 import { MediaButton } from "@/components/MediaButton";
+import * as IntentLauncher from "expo-intent-launcher";
+import Toast from "react-native-toast-message";
 
 import usePlayerStore from "@/stores/playerStore";
 import useDetailStore from "@/stores/detailStore";
 import { useSources } from "@/stores/sourceStore";
+import { useSettingsStore } from "@/stores/settingsStore";
 
 interface PlayerControlsProps {
   showControls: boolean;
   setShowControls: (show: boolean) => void;
 }
 
-export const PlayerControls: React.FC<PlayerControlsProps> = ({ showControls, setShowControls }) => {
+export const PlayerControls: React.FC<PlayerControlsProps> = ({ showControls }) => {
   const {
     currentEpisodeIndex,
     episodes,
@@ -33,8 +47,9 @@ export const PlayerControls: React.FC<PlayerControlsProps> = ({ showControls, se
     outroStartTime,
   } = usePlayerStore();
 
-  const { detail } = useDetailStore();
+  const { detail, searchResults } = useDetailStore();
   const resources = useSources();
+  const { playerBackend, setAndSavePlayerBackend } = useSettingsStore();
 
   const videoTitle = detail?.title || "";
   const currentEpisode = episodes[currentEpisodeIndex];
@@ -42,6 +57,10 @@ export const PlayerControls: React.FC<PlayerControlsProps> = ({ showControls, se
   const currentSource = resources.find((r) => r.source === detail?.source);
   const currentSourceName = currentSource?.source_name;
   const hasNextEpisode = currentEpisodeIndex < (episodes.length || 0) - 1;
+
+  const availableSourceCount = (searchResults || []).filter(
+    (item) => item?.source && item.episodes && item.episodes.length > currentEpisodeIndex
+  ).length;
 
   const formatTime = (milliseconds: number) => {
     if (!milliseconds) return "00:00";
@@ -57,12 +76,55 @@ export const PlayerControls: React.FC<PlayerControlsProps> = ({ showControls, se
     }
   };
 
+  const onOpenExternalPlayer = async () => {
+    if (!currentEpisode?.url) return;
+
+    try {
+      if (Platform.OS === "android") {
+        await IntentLauncher.startActivityAsync("android.intent.action.VIEW", {
+          data: currentEpisode.url,
+          type: "video/*",
+        });
+      } else {
+        await Linking.openURL(currentEpisode.url);
+      }
+    } catch {
+      try {
+        await Linking.openURL(currentEpisode.url);
+      } catch {
+        Toast.show({ type: "error", text1: "系统播放器打开失败" });
+      }
+    }
+  };
+
+  const onSwitchPlaybackBackend = async () => {
+    const nextBackend = playerBackend === "auto" ? "mediaplayer" : "auto";
+    try {
+      await setAndSavePlayerBackend(nextBackend);
+      Toast.show({
+        type: "success",
+        text1: `播放内核已切换：${nextBackend === "mediaplayer" ? "MediaPlayer" : "ExoPlayer"}`,
+        text2: "当前视频会自动重载并应用新内核",
+      });
+    } catch {
+      Toast.show({ type: "error", text1: "切换播放内核失败" });
+    }
+  };
+
+  const onOpenSourceSwitcher = () => {
+    if (availableSourceCount <= 1) {
+      Toast.show({ type: "info", text1: "当前没有可切换的播放源" });
+      return;
+    }
+    setShowSourceModal(true);
+  };
+
   return (
     <View style={styles.controlsOverlay}>
       <View style={styles.topControls}>
         <Text style={styles.controlTitle}>
-          {videoTitle} {currentEpisodeTitle ? `- ${currentEpisodeTitle}` : ""}{" "}
-          {currentSourceName ? `(${currentSourceName})` : ""}
+          {videoTitle} {currentEpisodeTitle ? `- ${currentEpisodeTitle}` : ""} {currentSourceName ? `(${currentSourceName})` : ""}{" "}
+          [{playerBackend === "mediaplayer" ? "MediaPlayer" : "ExoPlayer"}]
         </Text>
       </View>
 
@@ -77,7 +139,6 @@ export const PlayerControls: React.FC<PlayerControlsProps> = ({ showControls, se
               },
             ]}
           />
-          <Pressable style={styles.progressBarTouchable} />
         </View>
 
         <ThemedText style={{ color: "white", marginTop: 5 }}>
@@ -92,11 +153,7 @@ export const PlayerControls: React.FC<PlayerControlsProps> = ({ showControls, se
           </MediaButton>
 
           <MediaButton onPress={togglePlayPause} hasTVPreferredFocus={showControls}>
-            {status?.isLoaded && status.isPlaying ? (
-              <Pause color="white" size={24} />
-            ) : (
-              <Play color="white" size={24} />
-            )}
+            {status?.isLoaded && status.isPlaying ? <Pause color="white" size={24} /> : <Play color="white" size={24} />}
           </MediaButton>
 
           <MediaButton onPress={onPlayNextEpisode} disabled={!hasNextEpisode}>
@@ -115,8 +172,16 @@ export const PlayerControls: React.FC<PlayerControlsProps> = ({ showControls, se
             <Gauge color="white" size={24} />
           </MediaButton>
 
-          <MediaButton onPress={() => setShowSourceModal(true)}>
+          <MediaButton onPress={onOpenSourceSwitcher} timeLabel={`源${availableSourceCount}`}>
             <Tv color="white" size={24} />
+          </MediaButton>
+
+          <MediaButton onPress={onSwitchPlaybackBackend} timeLabel={playerBackend === "mediaplayer" ? "MP" : "EXO"}>
+            <Cpu color="white" size={24} />
+          </MediaButton>
+
+          <MediaButton onPress={onOpenExternalPlayer}>
+            <ExternalLink color="white" size={24} />
           </MediaButton>
         </View>
       </View>
@@ -176,33 +241,5 @@ const styles = StyleSheet.create({
     height: 8,
     backgroundColor: "#fff",
     borderRadius: 4,
-  },
-  progressBarTouchable: {
-    position: "absolute",
-    left: 0,
-    right: 0,
-    height: 30,
-    top: -10,
-    zIndex: 10,
-  },
-  controlButton: {
-    padding: 10,
-    flexDirection: "row",
-    alignItems: "center",
-  },
-  topRightContainer: {
-    padding: 10,
-    alignItems: "center",
-    justifyContent: "center",
-    minWidth: 44, // Match TouchableOpacity default size for alignment
-  },
-  resolutionText: {
-    color: "white",
-    fontSize: 16,
-    fontWeight: "bold",
-    backgroundColor: "rgba(0,0,0,0.5)",
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 6,
   },
 });

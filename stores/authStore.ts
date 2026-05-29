@@ -4,6 +4,7 @@ import { api } from "@/services/api";
 import { useSettingsStore } from "./settingsStore";
 import Toast from "react-native-toast-message";
 import Logger from "@/utils/Logger";
+import { LoginCredentialsManager } from "@/services/storage";
 
 const logger = Logger.withTag('AuthStore');
 
@@ -67,7 +68,18 @@ const useAuthStore = create<AuthState>((set) => ({
             set({ isLoggedIn: true });
           }
         } else {
-          set({ isLoggedIn: false, isLoginModalVisible: true });
+          // Try auto-login with saved credentials first.
+          const savedCredentials = await LoginCredentialsManager.get();
+          if (savedCredentials?.password) {
+            const loginResult = await api.login(savedCredentials.username, savedCredentials.password).catch(() => null);
+            if (loginResult?.ok) {
+              set({ isLoggedIn: true, isLoginModalVisible: false });
+            } else {
+              set({ isLoggedIn: false, isLoginModalVisible: true });
+            }
+          } else {
+            set({ isLoggedIn: false, isLoginModalVisible: true });
+          }
         }
       } else {
         set({ isLoggedIn: true, isLoginModalVisible: false });

@@ -167,10 +167,39 @@ const useHomeStore = create<HomeState>((set, get) => ({
               play_time: record.play_time,
             };
           })
-          // .filter((record) => record.progress !== undefined && record.progress > 0 && record.progress < 1)
           .sort((a, b) => (b.lastPlayed || 0) - (a.lastPlayed || 0));
 
-        set({ contentData: rowItems, hasMore: false });
+        // Merge play records from different sources for the same title/year into one card.
+        const mergedMap = new Map<string, RowItem>();
+        for (const item of rowItems) {
+          const mergeKey = `${(item.title || "").trim().toLowerCase()}::${item.year || ""}`;
+          const existing = mergedMap.get(mergeKey);
+          if (!existing) {
+            mergedMap.set(mergeKey, item);
+            continue;
+          }
+
+          // Keep the most recently played source as the primary record.
+          if ((item.lastPlayed || 0) > (existing.lastPlayed || 0)) {
+            mergedMap.set(mergeKey, {
+              ...item,
+              // Keep max progress and richer episode metadata when available.
+              progress: Math.max(item.progress || 0, existing.progress || 0),
+              totalEpisodes: Math.max(item.totalEpisodes || 0, existing.totalEpisodes || 0),
+              play_time: Math.max(item.play_time || 0, existing.play_time || 0),
+            });
+          } else {
+            mergedMap.set(mergeKey, {
+              ...existing,
+              progress: Math.max(item.progress || 0, existing.progress || 0),
+              totalEpisodes: Math.max(item.totalEpisodes || 0, existing.totalEpisodes || 0),
+              play_time: Math.max(item.play_time || 0, existing.play_time || 0),
+            });
+          }
+        }
+        const mergedRows = Array.from(mergedMap.values()).sort((a, b) => (b.lastPlayed || 0) - (a.lastPlayed || 0));
+
+        set({ contentData: mergedRows, hasMore: false });
       } else if (selectedCategory.type && selectedCategory.tag) {
         const result = await api.getDoubanData(
           selectedCategory.type,

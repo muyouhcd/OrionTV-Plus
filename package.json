@@ -10,6 +10,7 @@
     "prebuild": "EXPO_TV=1 EXPO_USE_METRO_WORKSPACE_ROOT=1 expo prebuild --clean && yarn copy-config",
     "copy-config": "cp -r xml/* android/app/src/*",
     "build": "NODE_ENV=production EXPO_TV=1 yarn prebuild && cd android && ./gradlew assembleRelease",
+    "build:apk": "powershell -NoProfile -ExecutionPolicy Bypass -File ./scripts/build-apk.ps1",
     "build-debug": "cd android && ./gradlew assembleDebug",
     "test": "jest --watchAll",
     "test-ci": "jest --ci --coverage --no-cache",

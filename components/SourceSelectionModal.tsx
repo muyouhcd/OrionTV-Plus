@@ -1,49 +1,60 @@
 import React from "react";
 import { View, Text, StyleSheet, Modal, FlatList } from "react-native";
+import Toast from "react-native-toast-message";
 import { StyledButton } from "./StyledButton";
 import useDetailStore from "@/stores/detailStore";
 import usePlayerStore from "@/stores/playerStore";
-import Logger from '@/utils/Logger';
+import Logger from "@/utils/Logger";
 
-const logger = Logger.withTag('SourceSelectionModal');
+const logger = Logger.withTag("SourceSelectionModal");
 
 export const SourceSelectionModal: React.FC = () => {
   const { showSourceModal, setShowSourceModal, loadVideo, currentEpisodeIndex, status } = usePlayerStore();
   const { searchResults, detail, setDetail } = useDetailStore();
 
+  const availableSources = (searchResults || []).filter(
+    (item) => item?.source && item.episodes && item.episodes.length > currentEpisodeIndex
+  );
+
   const onSelectSource = (index: number) => {
-    logger.debug("onSelectSource", index, searchResults[index].source, detail?.source);
-    if (searchResults[index].source !== detail?.source) {
-      const newDetail = searchResults[index];
-      setDetail(newDetail);
-      
-      // Reload the video with the new source, preserving current position
+    const target = availableSources[index];
+    if (!target) return;
+
+    logger.debug("onSelectSource", index, target.source, detail?.source);
+
+    if (target.source !== detail?.source) {
+      setDetail(target);
+
       const currentPosition = status?.isLoaded ? status.positionMillis : undefined;
       loadVideo({
-        source: newDetail.source,
-        id: newDetail.id.toString(),
+        source: target.source,
+        id: target.id.toString(),
         episodeIndex: currentEpisodeIndex,
-        title: newDetail.title,
-        position: currentPosition
+        title: target.title,
+        position: currentPosition,
+      });
+
+      Toast.show({
+        type: "success",
+        text1: `ÒÑÇĞ»»²¥·ÅÔ´£º${target.source_name}`,
+        text2: "ÕıÔÚ±£Áô½ø¶È²¢ÖØĞÂ¼ÓÔØ",
       });
     }
-    setShowSourceModal(false);
-  };
 
-  const onClose = () => {
     setShowSourceModal(false);
   };
 
   return (
-    <Modal visible={showSourceModal} transparent={true} animationType="slide" onRequestClose={onClose}>
+    <Modal visible={showSourceModal} transparent animationType="slide" onRequestClose={() => setShowSourceModal(false)}>
       <View style={styles.modalContainer}>
         <View style={styles.modalContent}>
-          <Text style={styles.modalTitle}>é€‰æ‹©æ’­æ”¾æº</Text>
+          <Text style={styles.modalTitle}>Ñ¡Ôñ²¥·ÅÔ´</Text>
           <FlatList
-            data={searchResults}
+            data={availableSources}
             numColumns={3}
             contentContainerStyle={styles.sourceList}
             keyExtractor={(item, index) => `source-${item.source}-${index}`}
+            ListEmptyComponent={<Text style={styles.emptyText}>µ±Ç°¾ç¼¯Ã»ÓĞ¿ÉÇĞ»»µÄ²¥·ÅÔ´</Text>}
             renderItem={({ item, index }) => (
               <StyledButton
                 text={item.source_name}
@@ -93,5 +104,11 @@ const styles = StyleSheet.create({
   },
   sourceItemText: {
     fontSize: 14,
+  },
+  emptyText: {
+    color: "#bbb",
+    fontSize: 14,
+    textAlign: "center",
+    marginTop: 24,
   },
 });

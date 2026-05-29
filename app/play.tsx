@@ -18,6 +18,7 @@ import usePlayerStore, { selectCurrentEpisode } from "@/stores/playerStore";
 import { useResponsiveLayout } from "@/hooks/useResponsiveLayout";
 import { useVideoHandlers } from "@/hooks/useVideoHandlers";
 import Logger from '@/utils/Logger';
+import { useSettingsStore } from "@/stores/settingsStore";
 
 const logger = Logger.withTag('PlayScreen');
 
@@ -111,6 +112,7 @@ export default function PlayScreen() {
     reset,
     loadVideo,
   } = usePlayerStore();
+  const playerBackend = useSettingsStore((state) => state.playerBackend);
   const currentEpisode = usePlayerStore(selectCurrentEpisode);
 
   // 使用Video事件处理hook
@@ -223,7 +225,7 @@ export default function PlayScreen() {
       >
         {/* 条件渲染Video组件：只有在有有效URL时才渲染 */}
         {currentEpisode?.url ? (
-          <Video ref={videoRef} style={dynamicStyles.videoPlayer} {...videoProps} />
+          <Video key={`${currentEpisode.url}-${playerBackend}`} ref={videoRef} style={dynamicStyles.videoPlayer} {...videoProps} />
         ) : (
           <LoadingContainer style={dynamicStyles.loadingContainer} currentEpisode={currentEpisode} />
         )}

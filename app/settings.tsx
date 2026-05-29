@@ -11,6 +11,7 @@ import { useSettingsStore } from "@/stores/settingsStore";
 import { useRemoteControlStore } from "@/stores/remoteControlStore";
 import { APIConfigSection } from "@/components/settings/APIConfigSection";
 import { LiveStreamSection } from "@/components/settings/LiveStreamSection";
+import { PlaybackEngineSection } from "@/components/settings/PlaybackEngineSection";
 import { RemoteInputSection } from "@/components/settings/RemoteInputSection";
 import { UpdateSection } from "@/components/settings/UpdateSection";
 // import { VideoSourceSection } from "@/components/settings/VideoSourceSection";
@@ -197,6 +198,10 @@ export default function SettingsScreen() {
         />
       ),
       key: "livestream",
+    },
+    {
+      component: <PlaybackEngineSection onChanged={markAsChanged} />,
+      key: "playbackEngine",
     },
     Platform.OS === "android" && {
       component: <UpdateSection />,
