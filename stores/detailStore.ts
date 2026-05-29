@@ -9,6 +9,18 @@ const logger = Logger.withTag('DetailStore');
 
 export type SearchResultWithResolution = SearchResult & { resolution?: string | null };
 
+const resolutionToHeight = (resolution?: string | null) => {
+  if (!resolution) return 9999;
+  const match = resolution.match(/(\d{3,4})/);
+  return match ? parseInt(match[1], 10) : 9999;
+};
+
+const pickSmootherSource = (candidates: SearchResultWithResolution[]) => {
+  if (!candidates.length) return null;
+  const sorted = [...candidates].sort((a, b) => resolutionToHeight(a.resolution) - resolutionToHeight(b.resolution));
+  return sorted[0];
+};
+
 interface DetailState {
   q: string | null;
   searchResults: SearchResultWithResolution[];
@@ -19,7 +31,7 @@ interface DetailState {
   allSourcesLoaded: boolean;
   controller: AbortController | null;
   isFavorited: boolean;
-  failedSources: Set<string>; // 记录失败的source列表
+  failedSources: Set<string>; // 鐠佹澘缍嶆径杈Е閻ㄥ墕ource閸掓銆?
 
   init: (q: string, preferredSource?: string, id?: string) => Promise<void>;
   setDetail: (detail: SearchResultWithResolution) => Promise<void>;
@@ -104,7 +116,7 @@ const useDetailStore = create<DetailState>((set, get) => ({
             source_name: r.source_name,
             resolution: r.resolution,
           })),
-          detail: state.detail ?? finalResults[0] ?? null,
+          detail: state.detail ?? pickSmootherSource(finalResults) ?? finalResults[0] ?? null,
         };
       });
     };
@@ -131,20 +143,20 @@ const useDetailStore = create<DetailState>((set, get) => ({
         
         if (signal.aborted) return;
         
-        // 检查preferred source结果
+        // 濡偓閺岊櫠referred source缂佹挻鐏?
         if (preferredResult.length > 0) {
           logger.info(`[SUCCESS] Preferred source "${preferredSource}" found ${preferredResult.length} results for "${q}"`);
           await processAndSetResults(preferredResult, false);
           set({ loading: false });
         } else {
-          // 降级策略：preferred source失败时立即尝试所有源
+          // 闂勫秶楠囩粵鏍殣閿涙referred source婢惰精瑙﹂弮鍓佺彌閸楀啿鐨剧拠鏇熷閺堝�?
           if (preferredSearchError) {
             logger.warn(`[FALLBACK] Preferred source "${preferredSource}" failed with error, trying all sources immediately`);
           } else {
             logger.warn(`[FALLBACK] Preferred source "${preferredSource}" returned 0 results for "${q}", trying all sources immediately`);
           }
           
-          // 立即尝试所有源，不再依赖后台搜索
+          // 缁斿宓嗙亸婵婄槸閹碘偓閺堝绨敍灞肩瑝閸愬秳绶风挧鏍ф倵閸欑増鎮崇�?
           const fallbackStart = performance.now();
           logger.info(`[PERF] FALLBACK search (all sources) START - query: "${q}"`);
           
@@ -163,20 +175,20 @@ const useDetailStore = create<DetailState>((set, get) => ({
             } else {
               logger.error(`[ERROR] FALLBACK search found no matching results for "${q}"`);
               set({ 
-                error: `未找到 "${q}" 的播放源，请检查标题或稍后重试`,
+                error: `No playable source found for "${q}". Please try another keyword later.`, 
                 loading: false 
               });
             }
           } catch (fallbackError) {
             logger.error(`[ERROR] FALLBACK search FAILED:`, fallbackError);
             set({ 
-              error: `搜索失败：${fallbackError instanceof Error ? fallbackError.message : '网络错误，请稍后重试'}`,
+              error: `Search failed: ${fallbackError instanceof Error ? fallbackError.message : "Network error, please retry later."}`, 
               loading: false 
             });
           }
         }
         
-        // 后台搜索（如果preferred source成功的话）
+        // 閸氬骸褰撮幖婊呭偍閿涘牆顩ч弸娓況eferred source閹存劕濮涢惃鍕樈閿?
         if (preferredResult.length > 0) {
           const searchAllStart = performance.now();
           logger.info(`[PERF] API searchVideos (background) START`);
@@ -213,7 +225,7 @@ const useDetailStore = create<DetailState>((set, get) => ({
           if (enabledResources.length === 0) {
             logger.error(`[ERROR] No enabled resources available for search`);
             set({ 
-              error: "没有可用的视频源，请检查设置或联系管理员",
+              error: "No enabled video source. Please check source settings or server status.",
               loading: false 
             });
             return;
@@ -247,11 +259,11 @@ const useDetailStore = create<DetailState>((set, get) => ({
 
           await Promise.all(searchPromises);
           
-          // 检查是否找到任何结果
+          // 濡偓閺屻儲妲搁崥锔藉閸掗鎹㈡担鏇犵波閺?
           if (totalResults === 0) {
             logger.error(`[ERROR] All sources returned 0 results for "${q}"`);
             set({ 
-              error: `未找到 "${q}" 的播放源，请尝试其他关键词或稍后重试`,
+              error: `No source found for "${q}". Try another keyword or retry later.`,
               loading: false 
             });
           } else {
@@ -260,7 +272,7 @@ const useDetailStore = create<DetailState>((set, get) => ({
         } catch (resourceError) {
           logger.error(`[ERROR] Failed to get resources:`, resourceError);
           set({ 
-            error: `获取视频源失败：${resourceError instanceof Error ? resourceError.message : '网络错误，请稍后重试'}`,
+            error: `Failed to load sources: ${resourceError instanceof Error ? resourceError.message : "Network error, please retry later."}`,
             loading: false 
           });
           return;
@@ -270,10 +282,10 @@ const useDetailStore = create<DetailState>((set, get) => ({
       const favoriteCheckStart = performance.now();
       const finalState = get();
       
-      // 最终检查：如果所有搜索都完成但仍然没有结果
+      // 閺堚偓缂佸牊顥呴弻銉窗婵″倹鐏夐幍鈧張澶嬫偝缁便垽鍏樼€瑰本鍨氭担鍡曠矝閻掕埖鐥呴張澶岀波閺?
       if (finalState.searchResults.length === 0 && !finalState.error) {
         logger.error(`[ERROR] All search attempts completed but no results found for "${q}"`);
-        set({ error: `未找到 "${q}" 的播放源，请检查标题拼写或稍后重试` });
+        set({ error: `閺堫亝澹橀�?"${q}" 閻ㄥ嫭鎸遍弨鐐爱閿涘矁顕Λ鈧弻銉︾垼妫版ɑ瀚鹃崘娆愬灗缁嬪秴鎮楅柌宥堢槸` });
       } else if (finalState.searchResults.length > 0) {
         logger.info(`[SUCCESS] DetailStore.init completed successfully with ${finalState.searchResults.length} sources`);
       }
@@ -298,8 +310,8 @@ const useDetailStore = create<DetailState>((set, get) => ({
     } catch (e) {
       if ((e as Error).name !== "AbortError") {
         logger.error(`[ERROR] DetailStore.init caught unexpected error:`, e);
-        const errorMessage = e instanceof Error ? e.message : "获取数据失败";
-        set({ error: `搜索失败：${errorMessage}` });
+        const errorMessage = e instanceof Error ? e.message : "Failed to fetch detail data";
+        set({ error: `Search failed: ${errorMessage}` });
       } else {
         logger.info(`[INFO] DetailStore.init aborted by user`);
       }
@@ -361,7 +373,7 @@ const useDetailStore = create<DetailState>((set, get) => ({
     logger.info(`[SOURCE_SELECTION] Looking for alternative to "${currentSource}" for episode ${episodeIndex + 1}`);
     logger.info(`[SOURCE_SELECTION] Failed sources: [${Array.from(failedSources).join(', ')}]`);
     
-    // 过滤掉当前source和已失败的sources
+    // 鏉╁洦鎶ら幒澶婄秼閸撳炒ource閸滃苯鍑℃径杈Е閻ㄥ墕ources
     const availableSources = searchResults.filter(result => 
       result.source !== currentSource && 
       !failedSources.has(result.source) &&
@@ -379,21 +391,9 @@ const useDetailStore = create<DetailState>((set, get) => ({
       return null;
     }
     
-    // 优先选择有高分辨率的source
+    // 娴兼ê鍘涢柅澶嬪閺堝鐝崚鍡氶哺閻滃洨娈憇ource
     const sortedSources = availableSources.sort((a, b) => {
-      const aResolution = a.resolution || '';
-      const bResolution = b.resolution || '';
-      
-      // 优先级: 1080p > 720p > 其他 > 无分辨率
-      const resolutionPriority = (res: string) => {
-        if (res.includes('1080')) return 4;
-        if (res.includes('720')) return 3;
-        if (res.includes('480')) return 2;
-        if (res.includes('360')) return 1;
-        return 0;
-      };
-      
-      return resolutionPriority(bResolution) - resolutionPriority(aResolution);
+      return resolutionToHeight(a.resolution) - resolutionToHeight(b.resolution);
     });
     
     const selectedSource = sortedSources[0];
