@@ -104,3 +104,9 @@ OrionTV 仅作为视频搜索工具，不存储、上传或分发任何视频内
 感谢以下项目提供 API Key 的赞助
 
 - [gpt-load](https://github.com/tbphp/gpt-load) - 一个高性能的 OpenAI 格式 API 多密钥轮询代理服务器，支持负载均衡，使用 Go 语言开发
+
+## Upstream Origin
+
+This repository is based on the original project:
+- Upstream: https://github.com/orion-lib/OrionTV
+- Fork/Plus maintainer: https://github.com/muyouhcd

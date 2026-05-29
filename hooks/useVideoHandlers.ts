@@ -1,4 +1,4 @@
-import { useCallback, RefObject, useMemo } from 'react';
+import { useCallback, RefObject, useMemo, useRef } from 'react';
 import { Video, ResizeMode } from 'expo-av';
 import Toast from 'react-native-toast-message';
 import usePlayerStore from '@/stores/playerStore';
@@ -26,6 +26,9 @@ export const useVideoHandlers = ({
   detail,
 }: UseVideoHandlersProps) => {
   const playerBackend = useSettingsStore((state) => state.playerBackend);
+  const wasBufferingRef = useRef(false);
+  const bufferingStartAtRef = useRef<number | null>(null);
+  const isResyncingRef = useRef(false);
   const onLoad = useCallback(async () => {
     console.info('[PERF] Video onLoad - video ready to play');
 
@@ -53,7 +56,44 @@ export const useVideoHandlers = ({
 
     console.info(`[PERF] Video onLoadStart - starting to load video: ${currentEpisode.url.substring(0, 100)}...`);
     usePlayerStore.setState({ isLoading: true });
+    wasBufferingRef.current = false;
+    bufferingStartAtRef.current = null;
+    isResyncingRef.current = false;
   }, [currentEpisode?.url]);
+
+  const wrappedPlaybackStatusUpdate = useCallback(
+    async (status: any) => {
+      if (status?.isLoaded) {
+        if (status.isBuffering && !wasBufferingRef.current) {
+          wasBufferingRef.current = true;
+          bufferingStartAtRef.current = Date.now();
+        }
+
+        if (!status.isBuffering && wasBufferingRef.current) {
+          wasBufferingRef.current = false;
+          const bufferingDuration = bufferingStartAtRef.current ? Date.now() - bufferingStartAtRef.current : 0;
+          bufferingStartAtRef.current = null;
+
+          // For some Android TV devices, a long buffering recovery may leave A/V drift.
+          // Seeking to current position forces native pipeline re-sync.
+          if (bufferingDuration >= 1500 && !isResyncingRef.current && status.positionMillis > 0) {
+            isResyncingRef.current = true;
+            try {
+              await videoRef.current?.setPositionAsync(status.positionMillis);
+              console.info(`[AUDIO_SYNC] Resynced after buffering (${bufferingDuration}ms) at ${status.positionMillis}ms`);
+            } catch (error) {
+              console.warn('[AUDIO_SYNC] Failed to resync after buffering:', error);
+            } finally {
+              isResyncingRef.current = false;
+            }
+          }
+        }
+      }
+
+      handlePlaybackStatusUpdate(status);
+    },
+    [handlePlaybackStatusUpdate, videoRef]
+  );
 
   const onError = useCallback(
     (error: any) => {
@@ -106,7 +146,7 @@ export const useVideoHandlers = ({
       posterSource: { uri: detail?.poster ?? '' },
       resizeMode: ResizeMode.CONTAIN,
       rate: playbackRate,
-      onPlaybackStatusUpdate: handlePlaybackStatusUpdate,
+      onPlaybackStatusUpdate: wrappedPlaybackStatusUpdate,
       onLoad,
       onLoadStart,
       onError,
@@ -120,7 +160,7 @@ export const useVideoHandlers = ({
       currentEpisode?.url,
       detail?.poster,
       playbackRate,
-      handlePlaybackStatusUpdate,
+      wrappedPlaybackStatusUpdate,
       onLoad,
       onLoadStart,
       onError,
