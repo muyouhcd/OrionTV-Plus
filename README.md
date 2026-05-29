@@ -110,3 +110,9 @@ OrionTV ä»…ä½œä¸ºè§†é¢‘æœç´¢å·¥å…·ï¼Œä¸å­˜å‚¨ã€ä¸Šä¼ æˆ–åˆ†å‘ä»»ä½•è§†é¢‘å†…
 This repository is based on the original project:
 - Upstream: https://github.com/orion-lib/OrionTV
 - Fork/Plus maintainer: https://github.com/muyouhcd
+
+## ÏîÄ¿À´Ô´ËµÃ÷
+
+±¾ÏîÄ¿ **OrionTV-Plus** »ùÓÚÔ­°æÏîÄ¿¶ş´Î¿ª·¢£º
+- Ô­°æ²Ö¿â£¨Upstream£©£ºhttps://github.com/orion-lib/OrionTV
+- ±¾²Ö¿âÔÚÔ­°æ»ù´¡ÉÏ½øĞĞ¹¦ÄÜÔöÇ¿ÓëÊÊÅäÓÅ»¯£¨Èç²¥·ÅÄÚºËÇĞ»»¡¢²¥·ÅÔ´ÇĞ»»¡¢ÀúÊ·ºÏ²¢¡¢×Ô¶¯µÇÂ¼ÓëÒ»¼ü´ò°ü£©¡£
