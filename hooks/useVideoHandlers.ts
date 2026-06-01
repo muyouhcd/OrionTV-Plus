@@ -26,43 +26,42 @@ export const useVideoHandlers = ({
   detail,
 }: UseVideoHandlersProps) => {
   const playerBackend = useSettingsStore((state) => state.playerBackend);
+
   const wasBufferingRef = useRef(false);
   const bufferingStartAtRef = useRef<number | null>(null);
   const isResyncingRef = useRef(false);
   const bufferingEventsRef = useRef<number[]>([]);
+  const severeStallEventsRef = useRef<number[]>([]);
   const isAutoSwitchingRef = useRef(false);
-  const onLoad = useCallback(async () => {
-    console.info('[PERF] Video onLoad - video ready to play');
+  const backendFailoverDoneRef = useRef(false);
 
+  const onLoad = useCallback(async () => {
     try {
-      // Reduce callback frequency to lower JS thread pressure on TV devices.
-      await videoRef.current?.setProgressUpdateIntervalAsync(1000);
+      // Lower callback frequency to reduce JS load on TV chipsets.
+      await videoRef.current?.setProgressUpdateIntervalAsync(deviceType === 'tv' ? 2000 : 1000);
 
       const jumpPosition = initialPosition || introEndTime || 0;
       if (jumpPosition > 0) {
-        console.info(`[PERF] Setting initial position to ${jumpPosition}ms`);
         await videoRef.current?.setPositionAsync(jumpPosition);
       }
 
-      // shouldPlay is already true; avoid extra playAsync race on some devices.
       usePlayerStore.setState({ isLoading: false });
-      console.info('[PERF] Video loading complete - isLoading set to false');
-    } catch (error) {
-      console.warn('[VIDEO_INIT] Failed to initialize playback settings:', error);
+    } catch {
       usePlayerStore.setState({ isLoading: false });
     }
-  }, [videoRef, initialPosition, introEndTime]);
+  }, [videoRef, initialPosition, introEndTime, deviceType]);
 
   const onLoadStart = useCallback(() => {
     if (!currentEpisode?.url) return;
 
-    console.info(`[PERF] Video onLoadStart - starting to load video: ${currentEpisode.url.substring(0, 100)}...`);
     usePlayerStore.setState({ isLoading: true });
     wasBufferingRef.current = false;
     bufferingStartAtRef.current = null;
     isResyncingRef.current = false;
     bufferingEventsRef.current = [];
+    severeStallEventsRef.current = [];
     isAutoSwitchingRef.current = false;
+    backendFailoverDoneRef.current = false;
   }, [currentEpisode?.url]);
 
   const wrappedPlaybackStatusUpdate = useCallback(
@@ -77,34 +76,63 @@ export const useVideoHandlers = ({
           wasBufferingRef.current = false;
           const bufferingDuration = bufferingStartAtRef.current ? Date.now() - bufferingStartAtRef.current : 0;
           bufferingStartAtRef.current = null;
+
           const now = Date.now();
           bufferingEventsRef.current.push(now);
-          // Keep only recent 90 seconds events for stutter detection.
           bufferingEventsRef.current = bufferingEventsRef.current.filter((t) => now - t <= 90_000);
 
-          // For some Android TV devices, a long buffering recovery may leave A/V drift.
-          // Seeking to current position forces native pipeline re-sync.
+          // Keep A/V sync stable after noticeable buffering.
           if (bufferingDuration >= 1500 && !isResyncingRef.current && status.positionMillis > 0) {
             isResyncingRef.current = true;
             try {
               await videoRef.current?.setPositionAsync(status.positionMillis);
-              console.info(`[AUDIO_SYNC] Resynced after buffering (${bufferingDuration}ms) at ${status.positionMillis}ms`);
-            } catch (error) {
-              console.warn('[AUDIO_SYNC] Failed to resync after buffering:', error);
+            } catch {
+              // best effort
             } finally {
               isResyncingRef.current = false;
             }
           }
 
-          // Proactively switch to another source when playback is clearly unstable.
-          // Goal: smoother playback over sharpness when current source keeps stalling.
-          const tooManyStutters = bufferingEventsRef.current.length >= 3;
-          const veryLongBuffer = bufferingDuration >= 6000;
+          // Lightweight recovery first, avoid immediate source switch.
+          if (bufferingDuration >= 4500) {
+            try {
+              await videoRef.current?.pauseAsync();
+              await videoRef.current?.playAsync();
+            } catch {
+              // best effort
+            }
+          }
+
+          if (bufferingDuration >= 5000) {
+            severeStallEventsRef.current.push(now);
+            severeStallEventsRef.current = severeStallEventsRef.current.filter((t) => now - t <= 180_000);
+          }
+
+          // If stalls repeat, fail over backend once per stream before switching source.
+          if (
+            deviceType === 'tv' &&
+            severeStallEventsRef.current.length >= 2 &&
+            !backendFailoverDoneRef.current
+          ) {
+            backendFailoverDoneRef.current = true;
+            const settings = useSettingsStore.getState();
+            const nextBackend = settings.playerBackend === 'mediaplayer' ? 'auto' : 'mediaplayer';
+            settings.setPlayerBackend(nextBackend);
+            Toast.show({
+              type: 'info',
+              text1: `Playback unstable, switched backend to ${nextBackend === 'mediaplayer' ? 'MediaPlayer' : 'ExoPlayer'}`,
+            });
+            return;
+          }
+
+          // Source switch is last resort.
+          const tooManyStutters = bufferingEventsRef.current.length >= 6;
+          const veryLongBuffer = bufferingDuration >= 9000;
           if ((tooManyStutters || veryLongBuffer) && !isAutoSwitchingRef.current && currentEpisode?.url) {
             isAutoSwitchingRef.current = true;
             Toast.show({
               type: 'info',
-              text1: '检测到播放不稳定，正在自动切换更流畅线路',
+              text1: 'Current source is unstable, switching to backup source',
             });
             usePlayerStore.getState().handleVideoError('network', currentEpisode.url);
           }
@@ -113,14 +141,12 @@ export const useVideoHandlers = ({
 
       handlePlaybackStatusUpdate(status);
     },
-    [handlePlaybackStatusUpdate, videoRef]
+    [handlePlaybackStatusUpdate, videoRef, deviceType, currentEpisode?.url]
   );
 
   const onError = useCallback(
     (error: any) => {
       if (!currentEpisode?.url) return;
-
-      console.error('[ERROR] Video playback error:', error);
 
       const errorString = (error as any)?.error?.toString() || error?.toString() || '';
       const isSSLError =
@@ -133,28 +159,13 @@ export const useVideoHandlers = ({
         errorString.includes('SocketTimeoutException');
 
       if (isSSLError) {
-        console.error(`[SSL_ERROR] SSL certificate validation failed for URL: ${currentEpisode.url}`);
-        Toast.show({
-          type: 'error',
-          text1: 'SSL证书错误，正在尝试其他播放源...',
-          text2: '请稍候',
-        });
+        Toast.show({ type: 'error', text1: 'SSL error, trying another source' });
         usePlayerStore.getState().handleVideoError('ssl', currentEpisode.url);
       } else if (isNetworkError) {
-        console.error(`[NETWORK_ERROR] Network connection failed for URL: ${currentEpisode.url}`);
-        Toast.show({
-          type: 'error',
-          text1: '网络连接失败，正在尝试其他播放源...',
-          text2: '请稍候',
-        });
+        Toast.show({ type: 'error', text1: 'Network error, trying another source' });
         usePlayerStore.getState().handleVideoError('network', currentEpisode.url);
       } else {
-        console.error(`[VIDEO_ERROR] Other video error for URL: ${currentEpisode.url}`);
-        Toast.show({
-          type: 'error',
-          text1: '视频播放失败，正在尝试其他播放源...',
-          text2: '请稍候',
-        });
+        Toast.show({ type: 'error', text1: 'Playback failed, trying another source' });
         usePlayerStore.getState().handleVideoError('other', currentEpisode.url);
       }
     },

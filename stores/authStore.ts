@@ -6,7 +6,7 @@ import Toast from "react-native-toast-message";
 import Logger from "@/utils/Logger";
 import { LoginCredentialsManager } from "@/services/storage";
 
-const logger = Logger.withTag('AuthStore');
+const logger = Logger.withTag("AuthStore");
 
 interface AuthState {
   isLoggedIn: boolean;
@@ -19,9 +19,7 @@ interface AuthState {
 
 const trySavedCredentialsLogin = async () => {
   const savedCredentials = await LoginCredentialsManager.get();
-  if (!savedCredentials?.password) {
-    return false;
-  }
+  if (!savedCredentials?.password) return false;
 
   const username = (savedCredentials.username || "").trim();
   const password = savedCredentials.password;
@@ -29,30 +27,34 @@ const trySavedCredentialsLogin = async () => {
   return !!loginResult?.ok;
 };
 
+const validateExistingSession = async () => {
+  // Small authenticated API call to verify cookie validity.
+  await api.getSearchHistory();
+};
+
 const useAuthStore = create<AuthState>((set) => ({
   isLoggedIn: false,
   isLoginModalVisible: false,
   showLoginModal: () => set({ isLoginModalVisible: true }),
   hideLoginModal: () => set({ isLoginModalVisible: false }),
+
   checkLoginStatus: async (apiBaseUrl?: string) => {
     if (!apiBaseUrl) {
       set({ isLoggedIn: false, isLoginModalVisible: false });
       return;
     }
+
     try {
-      // Wait for server config to be loaded if it's currently loading
       const settingsState = useSettingsStore.getState();
       let serverConfig = settingsState.serverConfig;
 
-      // If server config is loading, wait a bit for it to complete
       if (settingsState.isLoadingServerConfig) {
-        // Wait up to 3 seconds for server config to load
         const maxWaitTime = 3000;
         const checkInterval = 100;
         let waitTime = 0;
 
         while (waitTime < maxWaitTime) {
-          await new Promise(resolve => setTimeout(resolve, checkInterval));
+          await new Promise((resolve) => setTimeout(resolve, checkInterval));
           waitTime += checkInterval;
           const currentState = useSettingsStore.getState();
           if (!currentState.isLoadingServerConfig) {
@@ -63,49 +65,55 @@ const useAuthStore = create<AuthState>((set) => ({
       }
 
       if (!serverConfig?.StorageType) {
-        // Only show error if we're not loading and have tried to fetch the config
         if (!settingsState.isLoadingServerConfig) {
-          Toast.show({ type: "error", text1: "请检查网络或者服务器地址是否可用" });
+          Toast.show({ type: "error", text1: "Server config unavailable. Please check network or API URL." });
         }
         return;
       }
 
-      const authToken = await AsyncStorage.getItem('authCookies');
+      const authToken = await AsyncStorage.getItem("authCookies");
+
       if (!authToken) {
-        if (serverConfig && serverConfig.StorageType === "localstorage") {
-          const loginResult = await api.login().catch(() => {
-            set({ isLoggedIn: false, isLoginModalVisible: true });
-          });
-          if (loginResult && loginResult.ok) {
-            set({ isLoggedIn: true });
-          }
-        } else {
-          // Try auto-login with saved credentials first.
-          const autoLoginOk = await trySavedCredentialsLogin();
-          if (autoLoginOk) {
+        if (serverConfig.StorageType === "localstorage") {
+          const loginResult = await api.login().catch(() => null);
+          if (loginResult?.ok) {
             set({ isLoggedIn: true, isLoginModalVisible: false });
           } else {
             set({ isLoggedIn: false, isLoginModalVisible: true });
           }
+          return;
         }
-      } else {
-        set({ isLoggedIn: true, isLoginModalVisible: false });
+
+        const autoLoginOk = await trySavedCredentialsLogin();
+        set({ isLoggedIn: autoLoginOk, isLoginModalVisible: !autoLoginOk });
+        return;
       }
-    } catch (error) {
-      logger.error("Failed to check login status:", error);
-      if (error instanceof Error && error.message === "UNAUTHORIZED") {
-        // Cookie may be expired, fallback to saved credentials auto-login.
+
+      // Cookie exists, but may be expired. Validate once.
+      try {
+        await validateExistingSession();
+        set({ isLoggedIn: true, isLoginModalVisible: false });
+      } catch (sessionError) {
+        const unauthorized = sessionError instanceof Error && sessionError.message === "UNAUTHORIZED";
+        if (!unauthorized) {
+          // Temporary network/API error: keep session state optimistic.
+          set({ isLoggedIn: true, isLoginModalVisible: false });
+          return;
+        }
+
         const autoLoginOk = await trySavedCredentialsLogin();
         if (autoLoginOk) {
           set({ isLoggedIn: true, isLoginModalVisible: false });
         } else {
           set({ isLoggedIn: false, isLoginModalVisible: true });
         }
-      } else {
-        set({ isLoggedIn: false });
       }
+    } catch (error) {
+      logger.error("Failed to check login status:", error);
+      set({ isLoggedIn: false, isLoginModalVisible: true });
     }
   },
+
   logout: async () => {
     try {
       await api.logout();
