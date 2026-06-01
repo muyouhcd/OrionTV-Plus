@@ -32,7 +32,6 @@ export const useVideoHandlers = ({
   const isResyncingRef = useRef(false);
   const bufferingEventsRef = useRef<number[]>([]);
   const severeStallEventsRef = useRef<number[]>([]);
-  const isAutoSwitchingRef = useRef(false);
   const backendFailoverDoneRef = useRef(false);
 
   const onLoad = useCallback(async () => {
@@ -60,7 +59,6 @@ export const useVideoHandlers = ({
     isResyncingRef.current = false;
     bufferingEventsRef.current = [];
     severeStallEventsRef.current = [];
-    isAutoSwitchingRef.current = false;
     backendFailoverDoneRef.current = false;
   }, [currentEpisode?.url]);
 
@@ -125,17 +123,8 @@ export const useVideoHandlers = ({
             return;
           }
 
-          // Source switch is last resort.
-          const tooManyStutters = bufferingEventsRef.current.length >= 6;
-          const veryLongBuffer = bufferingDuration >= 9000;
-          if ((tooManyStutters || veryLongBuffer) && !isAutoSwitchingRef.current && currentEpisode?.url) {
-            isAutoSwitchingRef.current = true;
-            Toast.show({
-              type: 'info',
-              text1: 'Current source is unstable, switching to backup source',
-            });
-            usePlayerStore.getState().handleVideoError('network', currentEpisode.url);
-          }
+          // Do not auto-switch source on buffering heuristics.
+          // Keep playback on current source and rely on local recovery only.
         }
       }
 
@@ -159,17 +148,17 @@ export const useVideoHandlers = ({
         errorString.includes('SocketTimeoutException');
 
       if (isSSLError) {
-        Toast.show({ type: 'error', text1: 'SSL error, trying another source' });
-        usePlayerStore.getState().handleVideoError('ssl', currentEpisode.url);
+        Toast.show({ type: 'error', text1: 'SSL error, attempting local recovery' });
+        void videoRef.current?.replayAsync();
       } else if (isNetworkError) {
-        Toast.show({ type: 'error', text1: 'Network error, trying another source' });
-        usePlayerStore.getState().handleVideoError('network', currentEpisode.url);
+        Toast.show({ type: 'error', text1: 'Playback interrupted, retrying current source' });
+        void videoRef.current?.replayAsync();
       } else {
-        Toast.show({ type: 'error', text1: 'Playback failed, trying another source' });
-        usePlayerStore.getState().handleVideoError('other', currentEpisode.url);
+        Toast.show({ type: 'error', text1: 'Playback failed, attempting local recovery' });
+        void videoRef.current?.replayAsync();
       }
     },
-    [currentEpisode?.url]
+    [currentEpisode?.url, videoRef]
   );
 
   const videoProps = useMemo(
