@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useCallback, memo, useMemo } from "react";
+﻿import React, { useEffect, useRef, useCallback, memo, useMemo } from "react";
 import { StyleSheet, TouchableOpacity, BackHandler, AppState, AppStateStatus, View, Platform, Linking } from "react-native";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { Video } from "expo-av";
@@ -23,7 +23,7 @@ import * as IntentLauncher from "expo-intent-launcher";
 
 const logger = Logger.withTag('PlayScreen');
 
-// 优化的加载动画组件
+// 浼樺寲鐨勫姞杞藉姩鐢荤粍浠?
 const LoadingContainer = memo(
   ({ style, currentEpisode }: { style: any; currentEpisode: { url: string; title: string } | undefined }) => {
     logger.info(
@@ -41,7 +41,7 @@ const LoadingContainer = memo(
 
 LoadingContainer.displayName = "LoadingContainer";
 
-// 移到组件外部避免重复创建
+// 绉诲埌缁勪欢澶栭儴閬垮厤閲嶅鍒涘缓
 const createResponsiveStyles = (deviceType: string) => {
   const isMobile = deviceType === "mobile";
   const isTablet = deviceType === "tablet";
@@ -50,12 +50,12 @@ const createResponsiveStyles = (deviceType: string) => {
     container: {
       flex: 1,
       backgroundColor: "black",
-      // 移动端和平板端可能需要状态栏处理
+      // 绉诲姩绔拰骞虫澘绔彲鑳介渶瑕佺姸鎬佹爮澶勭悊
       ...(isMobile || isTablet ? { paddingTop: 0 } : {}),
     },
     videoContainer: {
       ...StyleSheet.absoluteFillObject,
-      // 为触摸设备添加更多的交互区域
+      // 涓鸿Е鎽歌澶囨坊鍔犳洿澶氱殑浜や簰鍖哄煙
       ...(isMobile || isTablet ? { zIndex: 1 } : {}),
     },
     videoPlayer: {
@@ -77,7 +77,7 @@ export default function PlayScreen() {
   const router = useRouter();
   useKeepAwake();
 
-  // 响应式布局配置
+  // 鍝嶅簲寮忓竷灞€閰嶇疆
   const { deviceType } = useResponsiveLayout();
 
   const {
@@ -116,13 +116,18 @@ export default function PlayScreen() {
   } = usePlayerStore();
   const playerBackend = useSettingsStore((state) => state.playerBackend);
   const currentEpisode = usePlayerStore(selectCurrentEpisode);
+  const isSystemBackend = playerBackend === "system";
+  const systemEpisodeUrl = useMemo(() => {
+    if (!detail?.episodes || detail.episodes.length === 0) return "";
+    return detail.episodes[episodeIndex] || detail.episodes[0] || "";
+  }, [detail?.episodes, episodeIndex]);
 
   const openSystemPlayer = useCallback(async (url: string) => {
     try {
       if (Platform.OS === "android") {
         await IntentLauncher.startActivityAsync("android.intent.action.VIEW", {
           data: url,
-          type: url.toLowerCase().includes(".m3u8") ? "application/vnd.apple.mpegurl" : "video/*",
+          type: "video/*",
         });
       } else {
         await Linking.openURL(url);
@@ -136,7 +141,7 @@ export default function PlayScreen() {
     }
   }, []);
 
-  // 使用Video事件处理hook
+  // 浣跨敤Video浜嬩欢澶勭悊hook
   const { videoProps } = useVideoHandlers({
     videoRef,
     currentEpisode,
@@ -148,22 +153,24 @@ export default function PlayScreen() {
     detail: detail || undefined,
   });
 
-  // TV遥控器处理 - 总是调用hook，但根据设备类型决定是否使用结果
+  // TV閬ユ帶鍣ㄥ鐞?- 鎬绘槸璋冪敤hook锛屼絾鏍规嵁璁惧绫诲瀷鍐冲畾鏄惁浣跨敤缁撴灉
   const tvRemoteHandler = useTVRemoteHandler();
 
-  // 优化的动态样式 - 使用useMemo避免重复计算
+  // 浼樺寲鐨勫姩鎬佹牱寮?- 浣跨敤useMemo閬垮厤閲嶅璁＄畻
   const dynamicStyles = useMemo(() => createResponsiveStyles(deviceType), [deviceType]);
 
   useEffect(() => {
-    if (playerBackend !== "system" || !currentEpisode?.url) return;
-    if (systemPlayerOpenedUrlRef.current === currentEpisode.url) return;
+    if (!isSystemBackend || !systemEpisodeUrl) return;
+    if (systemPlayerOpenedUrlRef.current === systemEpisodeUrl) return;
 
-    systemPlayerOpenedUrlRef.current = currentEpisode.url;
+    systemPlayerOpenedUrlRef.current = systemEpisodeUrl;
+    reset();
     usePlayerStore.setState({ isLoading: false });
-    openSystemPlayer(currentEpisode.url);
-  }, [currentEpisode?.url, openSystemPlayer, playerBackend]);
+    openSystemPlayer(systemEpisodeUrl);
+  }, [isSystemBackend, openSystemPlayer, reset, systemEpisodeUrl]);
 
   useEffect(() => {
+    if (isSystemBackend) return;
     const perfStart = performance.now();
     logger.info(`[PERF] PlayScreen useEffect START - source: ${source}, id: ${id}, title: ${title}`);
 
@@ -182,9 +189,9 @@ export default function PlayScreen() {
       logger.info(`[PERF] PlayScreen unmounting - calling reset()`);
       reset(); // Reset state when component unmounts
     };
-  }, [episodeIndex, source, position, setVideoRef, reset, loadVideo, id, title]);
+  }, [episodeIndex, source, position, setVideoRef, reset, loadVideo, id, title, isSystemBackend]);
 
-  // 优化的屏幕点击处理
+  // 浼樺寲鐨勫睆骞曠偣鍑诲鐞?
   const onScreenPress = useCallback(() => {
     if (deviceType === "tv") {
       tvRemoteHandler.onScreenPress();
@@ -194,6 +201,7 @@ export default function PlayScreen() {
   }, [deviceType, tvRemoteHandler, setShowControls, showControls]);
 
   useEffect(() => {
+    if (isSystemBackend) return;
     const handleAppStateChange = (nextAppState: AppStateStatus) => {
       if (nextAppState === "background" || nextAppState === "inactive") {
         usePlayerStore.getState()._savePlayRecord({}, { immediate: true });
@@ -206,9 +214,10 @@ export default function PlayScreen() {
     return () => {
       subscription.remove();
     };
-  }, []);
+  }, [isSystemBackend]);
 
   useEffect(() => {
+    if (isSystemBackend) return;
     const backAction = () => {
       if (showControls) {
         setShowControls(false);
@@ -221,16 +230,17 @@ export default function PlayScreen() {
     const backHandler = BackHandler.addEventListener("hardwareBackPress", backAction);
 
     return () => backHandler.remove();
-  }, [showControls, setShowControls, router]);
+  }, [showControls, setShowControls, router, isSystemBackend]);
 
   useEffect(() => {
+    if (isSystemBackend) return;
     let timeoutId: NodeJS.Timeout | null = null;
 
     if (isLoading) {
       timeoutId = setTimeout(() => {
         if (usePlayerStore.getState().isLoading) {
           usePlayerStore.setState({ isLoading: false });
-          Toast.show({ type: "error", text1: "播放超时，请重试" });
+          Toast.show({ type: "error", text1: "鎾斁瓒呮椂锛岃閲嶈瘯" });
         }
       }, 60000); // 1 minute
     }
@@ -240,7 +250,7 @@ export default function PlayScreen() {
         clearTimeout(timeoutId);
       }
     };
-  }, [isLoading]);
+  }, [isLoading, isSystemBackend]);
 
   if (!detail) {
     return <VideoLoadingAnimation showProgressBar />;
@@ -252,12 +262,12 @@ export default function PlayScreen() {
         activeOpacity={1}
         style={dynamicStyles.videoContainer}
         onPress={onScreenPress}
-        disabled={deviceType !== "tv" && showControls} // 移动端和平板端在显示控制条时禁用触摸
+        disabled={deviceType !== "tv" && showControls} // 绉诲姩绔拰骞虫澘绔湪鏄剧ず鎺у埗鏉℃椂绂佺敤瑙︽懜
       >
-        {/* 条件渲染Video组件：只有在有有效URL时才渲染 */}
-        {currentEpisode?.url && playerBackend !== "system" ? (
+        {/* 鏉′欢娓叉煋Video缁勪欢锛氬彧鏈夊湪鏈夋湁鏁圲RL鏃舵墠娓叉煋 */}
+        {!isSystemBackend && currentEpisode?.url ? (
           <Video key={`${currentEpisode.url}-${playerBackend}`} ref={videoRef} style={dynamicStyles.videoPlayer} {...videoProps} />
-        ) : currentEpisode?.url && playerBackend === "system" ? (
+        ) : isSystemBackend && systemEpisodeUrl ? (
           <View style={dynamicStyles.loadingContainer}>
             <VideoLoadingAnimation showProgressBar={false} />
           </View>
@@ -265,14 +275,14 @@ export default function PlayScreen() {
           <LoadingContainer style={dynamicStyles.loadingContainer} currentEpisode={currentEpisode} />
         )}
 
-        {showControls && deviceType === "tv" && (
+        {!isSystemBackend && showControls && deviceType === "tv" && (
           <PlayerControls showControls={showControls} setShowControls={setShowControls} />
         )}
 
-        <SeekingBar />
+        {!isSystemBackend && <SeekingBar />}
 
-        {/* 只在Video组件存在且正在加载时显示加载动画覆盖层 */}
-        {currentEpisode?.url && isLoading && (
+        {/* 鍙湪Video缁勪欢瀛樺湪涓旀鍦ㄥ姞杞芥椂鏄剧ず鍔犺浇鍔ㄧ敾瑕嗙洊灞?*/}
+        {!isSystemBackend && currentEpisode?.url && isLoading && (
           <View style={dynamicStyles.loadingContainer}>
             <VideoLoadingAnimation showProgressBar />
           </View>
@@ -281,9 +291,12 @@ export default function PlayScreen() {
         {/* <NextEpisodeOverlay visible={showNextEpisodeOverlay} onCancel={() => setShowNextEpisodeOverlay(false)} /> */}
       </TouchableOpacity>
 
-      <EpisodeSelectionModal />
-      <SourceSelectionModal />
-      <SpeedSelectionModal />
+      {!isSystemBackend && <EpisodeSelectionModal />}
+      {!isSystemBackend && <SourceSelectionModal />}
+      {!isSystemBackend && <SpeedSelectionModal />}
     </ThemedView>
   );
 }
+
+
+

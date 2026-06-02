@@ -88,7 +88,7 @@ export const PlayerControls: React.FC<PlayerControlsProps> = ({ showControls }) 
       if (Platform.OS === "android") {
         await IntentLauncher.startActivityAsync("android.intent.action.VIEW", {
           data: currentEpisode.url,
-          type: currentEpisode.url.toLowerCase().includes(".m3u8") ? "application/vnd.apple.mpegurl" : "video/*",
+          type: "video/*",
         });
       } else {
         await Linking.openURL(currentEpisode.url);
