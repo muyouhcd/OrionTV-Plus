@@ -1,4 +1,4 @@
-import { useCallback, RefObject, useMemo, useRef } from 'react';
+import { useCallback, RefObject, useMemo } from 'react';
 import { Video, ResizeMode } from 'expo-av';
 import Toast from 'react-native-toast-message';
 import usePlayerStore from '@/stores/playerStore';
@@ -27,11 +27,6 @@ export const useVideoHandlers = ({
 }: UseVideoHandlersProps) => {
   const playerBackend = useSettingsStore((state) => state.playerBackend);
 
-  const wasBufferingRef = useRef(false);
-  const bufferingStartAtRef = useRef<number | null>(null);
-  const isResyncingRef = useRef(false);
-  const lastResyncAtRef = useRef(0);
-
   const onLoad = useCallback(async () => {
     try {
       // Lower callback frequency to reduce JS load on TV chipsets.
@@ -52,52 +47,13 @@ export const useVideoHandlers = ({
     if (!currentEpisode?.url) return;
 
     usePlayerStore.setState({ isLoading: true });
-    wasBufferingRef.current = false;
-    bufferingStartAtRef.current = null;
-    isResyncingRef.current = false;
-    lastResyncAtRef.current = 0;
   }, [currentEpisode?.url]);
 
   const wrappedPlaybackStatusUpdate = useCallback(
-    async (status: any) => {
-      if (status?.isLoaded) {
-        if (status.isBuffering && !wasBufferingRef.current) {
-          wasBufferingRef.current = true;
-          bufferingStartAtRef.current = Date.now();
-        }
-
-        if (!status.isBuffering && wasBufferingRef.current) {
-          wasBufferingRef.current = false;
-          const bufferingDuration = bufferingStartAtRef.current ? Date.now() - bufferingStartAtRef.current : 0;
-          bufferingStartAtRef.current = null;
-
-          const now = Date.now();
-
-          // Keep A/V sync stable after noticeable buffering, but throttle the seek.
-          if (
-            bufferingDuration >= 3000 &&
-            !isResyncingRef.current &&
-            status.positionMillis > 0 &&
-            now - lastResyncAtRef.current >= 30_000
-          ) {
-            isResyncingRef.current = true;
-            try {
-              lastResyncAtRef.current = now;
-              await videoRef.current?.setPositionAsync(status.positionMillis);
-            } catch {
-              // best effort
-            } finally {
-              isResyncingRef.current = false;
-            }
-          }
-
-          // Do not auto-switch source or backend on buffering heuristics.
-        }
-      }
-
+    (status: any) => {
       handlePlaybackStatusUpdate(status);
     },
-    [handlePlaybackStatusUpdate, videoRef, deviceType, currentEpisode?.url]
+    [handlePlaybackStatusUpdate]
   );
 
   const onError = useCallback(

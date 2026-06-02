@@ -7,11 +7,13 @@ import Logger from "@/utils/Logger";
 
 const logger = Logger.withTag('SettingsStore');
 
+export type PlayerBackend = "auto" | "mediaplayer" | "system";
+
 interface SettingsState {
   apiBaseUrl: string;
   m3uUrl: string;
   remoteInputEnabled: boolean;
-  playerBackend: "auto" | "mediaplayer";
+  playerBackend: PlayerBackend;
   videoSource: {
     enabledAll: boolean;
     sources: {
@@ -26,8 +28,8 @@ interface SettingsState {
   setApiBaseUrl: (url: string) => void;
   setM3uUrl: (url: string) => void;
   setRemoteInputEnabled: (enabled: boolean) => void;
-  setPlayerBackend: (backend: "auto" | "mediaplayer") => void;
-  setAndSavePlayerBackend: (backend: "auto" | "mediaplayer") => Promise<void>;
+  setPlayerBackend: (backend: PlayerBackend) => void;
+  setAndSavePlayerBackend: (backend: PlayerBackend) => Promise<void>;
   saveSettings: () => Promise<void>;
   setVideoSource: (config: { enabledAll: boolean; sources: { [key: string]: boolean } }) => void;
   showModal: () => void;

@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useCallback, memo, useMemo } from "react";
-import { StyleSheet, TouchableOpacity, BackHandler, AppState, AppStateStatus, View } from "react-native";
+import { StyleSheet, TouchableOpacity, BackHandler, AppState, AppStateStatus, View, Platform, Linking } from "react-native";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { Video } from "expo-av";
 import { useKeepAwake } from "expo-keep-awake";
@@ -19,6 +19,7 @@ import { useResponsiveLayout } from "@/hooks/useResponsiveLayout";
 import { useVideoHandlers } from "@/hooks/useVideoHandlers";
 import Logger from '@/utils/Logger';
 import { useSettingsStore } from "@/stores/settingsStore";
+import * as IntentLauncher from "expo-intent-launcher";
 
 const logger = Logger.withTag('PlayScreen');
 
@@ -72,6 +73,7 @@ const createResponsiveStyles = (deviceType: string) => {
 
 export default function PlayScreen() {
   const videoRef = useRef<Video>(null);
+  const systemPlayerOpenedUrlRef = useRef<string | null>(null);
   const router = useRouter();
   useKeepAwake();
 
@@ -115,6 +117,25 @@ export default function PlayScreen() {
   const playerBackend = useSettingsStore((state) => state.playerBackend);
   const currentEpisode = usePlayerStore(selectCurrentEpisode);
 
+  const openSystemPlayer = useCallback(async (url: string) => {
+    try {
+      if (Platform.OS === "android") {
+        await IntentLauncher.startActivityAsync("android.intent.action.VIEW", {
+          data: url,
+          type: url.toLowerCase().includes(".m3u8") ? "application/vnd.apple.mpegurl" : "video/*",
+        });
+      } else {
+        await Linking.openURL(url);
+      }
+    } catch {
+      try {
+        await Linking.openURL(url);
+      } catch {
+        Toast.show({ type: "error", text1: "System player failed to open" });
+      }
+    }
+  }, []);
+
   // 使用Video事件处理hook
   const { videoProps } = useVideoHandlers({
     videoRef,
@@ -132,6 +153,15 @@ export default function PlayScreen() {
 
   // 优化的动态样式 - 使用useMemo避免重复计算
   const dynamicStyles = useMemo(() => createResponsiveStyles(deviceType), [deviceType]);
+
+  useEffect(() => {
+    if (playerBackend !== "system" || !currentEpisode?.url) return;
+    if (systemPlayerOpenedUrlRef.current === currentEpisode.url) return;
+
+    systemPlayerOpenedUrlRef.current = currentEpisode.url;
+    usePlayerStore.setState({ isLoading: false });
+    openSystemPlayer(currentEpisode.url);
+  }, [currentEpisode?.url, openSystemPlayer, playerBackend]);
 
   useEffect(() => {
     const perfStart = performance.now();
@@ -224,8 +254,12 @@ export default function PlayScreen() {
         disabled={deviceType !== "tv" && showControls} // 移动端和平板端在显示控制条时禁用触摸
       >
         {/* 条件渲染Video组件：只有在有有效URL时才渲染 */}
-        {currentEpisode?.url ? (
+        {currentEpisode?.url && playerBackend !== "system" ? (
           <Video key={`${currentEpisode.url}-${playerBackend}`} ref={videoRef} style={dynamicStyles.videoPlayer} {...videoProps} />
+        ) : currentEpisode?.url && playerBackend === "system" ? (
+          <View style={dynamicStyles.loadingContainer}>
+            <VideoLoadingAnimation showProgressBar={false} />
+          </View>
         ) : (
           <LoadingContainer style={dynamicStyles.loadingContainer} currentEpisode={currentEpisode} />
         )}

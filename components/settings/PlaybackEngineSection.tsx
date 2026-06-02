@@ -3,7 +3,7 @@ import { View, StyleSheet } from "react-native";
 import { ThemedText } from "@/components/ThemedText";
 import { SettingsSection } from "./SettingsSection";
 import { StyledButton } from "@/components/StyledButton";
-import { useSettingsStore } from "@/stores/settingsStore";
+import { PlayerBackend, useSettingsStore } from "@/stores/settingsStore";
 import Toast from "react-native-toast-message";
 
 interface PlaybackEngineSectionProps {
@@ -13,12 +13,17 @@ interface PlaybackEngineSectionProps {
 export const PlaybackEngineSection: React.FC<PlaybackEngineSectionProps> = ({ onChanged }) => {
   const { playerBackend, setAndSavePlayerBackend } = useSettingsStore();
 
-  const setBackend = async (backend: "auto" | "mediaplayer") => {
+  const getBackendName = (backend: PlayerBackend) => {
+    if (backend === "system") return "System Player";
+    return backend === "mediaplayer" ? "MediaPlayer" : "ExoPlayer";
+  };
+
+  const setBackend = async (backend: PlayerBackend) => {
     await setAndSavePlayerBackend(backend);
     onChanged();
     Toast.show({
       type: "success",
-      text1: `已切换到 ${backend === "mediaplayer" ? "MediaPlayer" : "ExoPlayer"}`,
+      text1: `已切换到 ${getBackendName(backend)}`,
       text2: "进入播放页可看到当前内核状态",
     });
   };
@@ -27,7 +32,7 @@ export const PlaybackEngineSection: React.FC<PlaybackEngineSectionProps> = ({ on
     <SettingsSection>
       <ThemedText style={styles.title}>播放器内核</ThemedText>
       <ThemedText style={styles.subtitle}>
-        当前: {playerBackend === "mediaplayer" ? "MediaPlayer" : "ExoPlayer"}
+        当前: {getBackendName(playerBackend)}
       </ThemedText>
       <View style={styles.row}>
         <StyledButton
@@ -40,6 +45,12 @@ export const PlaybackEngineSection: React.FC<PlaybackEngineSectionProps> = ({ on
           text="MediaPlayer"
           variant={playerBackend === "mediaplayer" ? "primary" : "default"}
           onPress={() => setBackend("mediaplayer")}
+          style={styles.button}
+        />
+        <StyledButton
+          text="系统播放器"
+          variant={playerBackend === "system" ? "primary" : "default"}
+          onPress={() => setBackend("system")}
           style={styles.button}
         />
       </View>

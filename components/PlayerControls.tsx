@@ -1,4 +1,4 @@
-import React from "react";
+锘縤mport React from "react";
 import { View, Text, StyleSheet, Platform, Linking } from "react-native";
 import {
   Pause,
@@ -20,12 +20,17 @@ import Toast from "react-native-toast-message";
 import usePlayerStore from "@/stores/playerStore";
 import useDetailStore from "@/stores/detailStore";
 import { useSources } from "@/stores/sourceStore";
-import { useSettingsStore } from "@/stores/settingsStore";
+import { PlayerBackend, useSettingsStore } from "@/stores/settingsStore";
 
 interface PlayerControlsProps {
   showControls: boolean;
   setShowControls: (show: boolean) => void;
 }
+
+const getBackendName = (backend: PlayerBackend) => {
+  if (backend === "system") return "System";
+  return backend === "mediaplayer" ? "MediaPlayer" : "ExoPlayer";
+};
 
 export const PlayerControls: React.FC<PlayerControlsProps> = ({ showControls }) => {
   const {
@@ -83,7 +88,7 @@ export const PlayerControls: React.FC<PlayerControlsProps> = ({ showControls }) 
       if (Platform.OS === "android") {
         await IntentLauncher.startActivityAsync("android.intent.action.VIEW", {
           data: currentEpisode.url,
-          type: "video/*",
+          type: currentEpisode.url.toLowerCase().includes(".m3u8") ? "application/vnd.apple.mpegurl" : "video/*",
         });
       } else {
         await Linking.openURL(currentEpisode.url);
@@ -92,28 +97,29 @@ export const PlayerControls: React.FC<PlayerControlsProps> = ({ showControls }) 
       try {
         await Linking.openURL(currentEpisode.url);
       } catch {
-        Toast.show({ type: "error", text1: "系统播放器打开失败" });
+        Toast.show({ type: "error", text1: "System player failed" });
       }
     }
   };
 
   const onSwitchPlaybackBackend = async () => {
-    const nextBackend = playerBackend === "auto" ? "mediaplayer" : "auto";
+    const nextBackend: PlayerBackend =
+      playerBackend === "auto" ? "mediaplayer" : playerBackend === "mediaplayer" ? "system" : "auto";
     try {
       await setAndSavePlayerBackend(nextBackend);
       Toast.show({
         type: "success",
-        text1: `播放内核已切换：${nextBackend === "mediaplayer" ? "MediaPlayer" : "ExoPlayer"}`,
-        text2: "当前视频会自动重载并应用新内核",
+        text1: `Backend switched: ${getBackendName(nextBackend)}`,
+        text2: nextBackend === "system" ? "TV system player will be used" : "Current video will reload",
       });
     } catch {
-      Toast.show({ type: "error", text1: "切换播放内核失败" });
+      Toast.show({ type: "error", text1: "Backend switch failed" });
     }
   };
 
   const onOpenSourceSwitcher = () => {
     if (availableSourceCount <= 1) {
-      Toast.show({ type: "info", text1: "当前没有可切换的播放源" });
+      Toast.show({ type: "info", text1: "No alternative source" });
       return;
     }
     setShowSourceModal(true);
@@ -124,7 +130,7 @@ export const PlayerControls: React.FC<PlayerControlsProps> = ({ showControls }) 
       <View style={styles.topControls}>
         <Text style={styles.controlTitle}>
           {videoTitle} {currentEpisodeTitle ? `- ${currentEpisodeTitle}` : ""} {currentSourceName ? `(${currentSourceName})` : ""}{" "}
-          [{playerBackend === "mediaplayer" ? "MediaPlayer" : "ExoPlayer"}]
+          [{getBackendName(playerBackend)}]
         </Text>
       </View>
 
@@ -172,11 +178,14 @@ export const PlayerControls: React.FC<PlayerControlsProps> = ({ showControls }) 
             <Gauge color="white" size={24} />
           </MediaButton>
 
-          <MediaButton onPress={onOpenSourceSwitcher} timeLabel={`源${availableSourceCount}`}>
+          <MediaButton onPress={onOpenSourceSwitcher} timeLabel={`SRC${availableSourceCount}`}>
             <Tv color="white" size={24} />
           </MediaButton>
 
-          <MediaButton onPress={onSwitchPlaybackBackend} timeLabel={playerBackend === "mediaplayer" ? "MP" : "EXO"}>
+          <MediaButton
+            onPress={onSwitchPlaybackBackend}
+            timeLabel={playerBackend === "system" ? "SYS" : playerBackend === "mediaplayer" ? "MP" : "EXO"}
+          >
             <Cpu color="white" size={24} />
           </MediaButton>
 
