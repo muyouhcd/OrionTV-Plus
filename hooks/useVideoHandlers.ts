@@ -94,7 +94,7 @@ export const useVideoHandlers = ({
       onError,
       useNativeControls: deviceType !== 'tv',
       shouldPlay: true,
-      ...(deviceType === 'tv' && playerBackend === 'mediaplayer'
+      ...(deviceType === 'tv' && playerBackend === 'soft'
         ? { androidImplementation: 'MediaPlayer' as const }
         : {}),
     }),

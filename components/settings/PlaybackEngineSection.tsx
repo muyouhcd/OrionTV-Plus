@@ -15,7 +15,7 @@ export const PlaybackEngineSection: React.FC<PlaybackEngineSectionProps> = ({ on
 
   const getBackendName = (backend: PlayerBackend) => {
     if (backend === "system") return "System Player";
-    return backend === "mediaplayer" ? "MediaPlayer" : "ExoPlayer";
+    return backend === "soft" ? "软解" : "硬解";
   };
 
   const setBackend = async (backend: PlayerBackend) => {
@@ -36,15 +36,15 @@ export const PlaybackEngineSection: React.FC<PlaybackEngineSectionProps> = ({ on
       </ThemedText>
       <View style={styles.row}>
         <StyledButton
-          text="自动 (ExoPlayer)"
-          variant={playerBackend === "auto" ? "primary" : "default"}
-          onPress={() => setBackend("auto")}
+          text="硬解 (ExoPlayer)"
+          variant={playerBackend === "hard" ? "primary" : "default"}
+          onPress={() => setBackend("hard")}
           style={styles.button}
         />
         <StyledButton
-          text="MediaPlayer"
-          variant={playerBackend === "mediaplayer" ? "primary" : "default"}
-          onPress={() => setBackend("mediaplayer")}
+          text="软解 (MediaPlayer)"
+          variant={playerBackend === "soft" ? "primary" : "default"}
+          onPress={() => setBackend("soft")}
           style={styles.button}
         />
         <StyledButton

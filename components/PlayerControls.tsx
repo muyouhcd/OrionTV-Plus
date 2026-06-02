@@ -29,7 +29,7 @@ interface PlayerControlsProps {
 
 const getBackendName = (backend: PlayerBackend) => {
   if (backend === "system") return "System";
-  return backend === "mediaplayer" ? "MediaPlayer" : "ExoPlayer";
+  return backend === "soft" ? "软解" : "硬解";
 };
 
 export const PlayerControls: React.FC<PlayerControlsProps> = ({ showControls }) => {
@@ -104,7 +104,7 @@ export const PlayerControls: React.FC<PlayerControlsProps> = ({ showControls }) 
 
   const onSwitchPlaybackBackend = async () => {
     const nextBackend: PlayerBackend =
-      playerBackend === "auto" ? "mediaplayer" : playerBackend === "mediaplayer" ? "system" : "auto";
+      playerBackend === "hard" ? "soft" : playerBackend === "soft" ? "system" : "hard";
     try {
       await setAndSavePlayerBackend(nextBackend);
       Toast.show({
@@ -184,7 +184,7 @@ export const PlayerControls: React.FC<PlayerControlsProps> = ({ showControls }) 
 
           <MediaButton
             onPress={onSwitchPlaybackBackend}
-            timeLabel={playerBackend === "system" ? "SYS" : playerBackend === "mediaplayer" ? "MP" : "EXO"}
+            timeLabel={playerBackend === "system" ? "SYS" : playerBackend === "soft" ? "软" : "硬"}
           >
             <Cpu color="white" size={24} />
           </MediaButton>

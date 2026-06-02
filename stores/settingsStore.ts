@@ -7,7 +7,13 @@ import Logger from "@/utils/Logger";
 
 const logger = Logger.withTag('SettingsStore');
 
-export type PlayerBackend = "auto" | "mediaplayer" | "system";
+export type PlayerBackend = "hard" | "soft" | "system";
+
+const normalizePlayerBackend = (backend?: string | null): PlayerBackend => {
+  if (backend === "soft" || backend === "mediaplayer") return "soft";
+  if (backend === "system") return "system";
+  return "hard";
+};
 
 interface SettingsState {
   apiBaseUrl: string;
@@ -41,7 +47,7 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
   m3uUrl: "",
   liveStreamSources: [],
   remoteInputEnabled: false,
-  playerBackend: "auto",
+  playerBackend: "hard",
   isModalVisible: false,
   serverConfig: null,
   isLoadingServerConfig: false,
@@ -55,7 +61,7 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
       apiBaseUrl: settings.apiBaseUrl,
       m3uUrl: settings.m3uUrl,
       remoteInputEnabled: settings.remoteInputEnabled || false,
-      playerBackend: settings.playerBackend || "auto",
+      playerBackend: normalizePlayerBackend(settings.playerBackend),
       videoSource: settings.videoSource || {
         enabledAll: true,
         sources: {},
