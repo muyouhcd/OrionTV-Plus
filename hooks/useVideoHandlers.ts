@@ -30,9 +30,7 @@ export const useVideoHandlers = ({
   const wasBufferingRef = useRef(false);
   const bufferingStartAtRef = useRef<number | null>(null);
   const isResyncingRef = useRef(false);
-  const bufferingEventsRef = useRef<number[]>([]);
-  const severeStallEventsRef = useRef<number[]>([]);
-  const backendFailoverDoneRef = useRef(false);
+  const lastResyncAtRef = useRef(0);
 
   const onLoad = useCallback(async () => {
     try {
@@ -57,9 +55,7 @@ export const useVideoHandlers = ({
     wasBufferingRef.current = false;
     bufferingStartAtRef.current = null;
     isResyncingRef.current = false;
-    bufferingEventsRef.current = [];
-    severeStallEventsRef.current = [];
-    backendFailoverDoneRef.current = false;
+    lastResyncAtRef.current = 0;
   }, [currentEpisode?.url]);
 
   const wrappedPlaybackStatusUpdate = useCallback(
@@ -76,13 +72,17 @@ export const useVideoHandlers = ({
           bufferingStartAtRef.current = null;
 
           const now = Date.now();
-          bufferingEventsRef.current.push(now);
-          bufferingEventsRef.current = bufferingEventsRef.current.filter((t) => now - t <= 90_000);
 
-          // Keep A/V sync stable after noticeable buffering.
-          if (bufferingDuration >= 1500 && !isResyncingRef.current && status.positionMillis > 0) {
+          // Keep A/V sync stable after noticeable buffering, but throttle the seek.
+          if (
+            bufferingDuration >= 3000 &&
+            !isResyncingRef.current &&
+            status.positionMillis > 0 &&
+            now - lastResyncAtRef.current >= 30_000
+          ) {
             isResyncingRef.current = true;
             try {
+              lastResyncAtRef.current = now;
               await videoRef.current?.setPositionAsync(status.positionMillis);
             } catch {
               // best effort
@@ -91,40 +91,7 @@ export const useVideoHandlers = ({
             }
           }
 
-          // Lightweight recovery first, avoid immediate source switch.
-          if (bufferingDuration >= 4500) {
-            try {
-              await videoRef.current?.pauseAsync();
-              await videoRef.current?.playAsync();
-            } catch {
-              // best effort
-            }
-          }
-
-          if (bufferingDuration >= 5000) {
-            severeStallEventsRef.current.push(now);
-            severeStallEventsRef.current = severeStallEventsRef.current.filter((t) => now - t <= 180_000);
-          }
-
-          // If stalls repeat, fail over backend once per stream before switching source.
-          if (
-            deviceType === 'tv' &&
-            severeStallEventsRef.current.length >= 2 &&
-            !backendFailoverDoneRef.current
-          ) {
-            backendFailoverDoneRef.current = true;
-            const settings = useSettingsStore.getState();
-            const nextBackend = settings.playerBackend === 'mediaplayer' ? 'auto' : 'mediaplayer';
-            settings.setPlayerBackend(nextBackend);
-            Toast.show({
-              type: 'info',
-              text1: `Playback unstable, switched backend to ${nextBackend === 'mediaplayer' ? 'MediaPlayer' : 'ExoPlayer'}`,
-            });
-            return;
-          }
-
-          // Do not auto-switch source on buffering heuristics.
-          // Keep playback on current source and rely on local recovery only.
+          // Do not auto-switch source or backend on buffering heuristics.
         }
       }
 
@@ -148,17 +115,15 @@ export const useVideoHandlers = ({
         errorString.includes('SocketTimeoutException');
 
       if (isSSLError) {
-        Toast.show({ type: 'error', text1: 'SSL error, attempting local recovery' });
-        void videoRef.current?.replayAsync();
+        Toast.show({ type: 'error', text1: 'SSL error. Please switch source manually.' });
       } else if (isNetworkError) {
-        Toast.show({ type: 'error', text1: 'Playback interrupted, retrying current source' });
-        void videoRef.current?.replayAsync();
+        Toast.show({ type: 'error', text1: 'Playback interrupted. Please retry or switch source manually.' });
       } else {
-        Toast.show({ type: 'error', text1: 'Playback failed, attempting local recovery' });
-        void videoRef.current?.replayAsync();
+        Toast.show({ type: 'error', text1: 'Playback failed. Please retry or switch source manually.' });
       }
+      usePlayerStore.setState({ isLoading: false });
     },
-    [currentEpisode?.url, videoRef]
+    [currentEpisode?.url]
   );
 
   const videoProps = useMemo(

@@ -358,7 +358,7 @@ const usePlayerStore = create<PlayerState>((set, get) => ({
       set({ _isRecordSaveThrottled: true });
       setTimeout(() => {
         set({ _isRecordSaveThrottled: false });
-      }, 10000); // 10 seconds
+      }, 30000); // Reduce background work on TV devices during playback.
     }
 
     const { detail } = useDetailStore.getState();
