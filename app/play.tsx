@@ -196,6 +196,7 @@ export default function PlayScreen() {
   useEffect(() => {
     const handleAppStateChange = (nextAppState: AppStateStatus) => {
       if (nextAppState === "background" || nextAppState === "inactive") {
+        usePlayerStore.getState()._savePlayRecord({}, { immediate: true });
         videoRef.current?.pauseAsync();
       }
     };

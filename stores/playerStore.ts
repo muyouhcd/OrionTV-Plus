@@ -240,6 +240,7 @@ const usePlayerStore = create<PlayerState>((set, get) => ({
   playEpisode: async (index) => {
     const { episodes, videoRef } = get();
     if (index >= 0 && index < episodes.length) {
+      get()._savePlayRecord({}, { immediate: true });
       set({
         currentEpisodeIndex: index,
         showNextEpisodeOverlay: false,
@@ -261,6 +262,7 @@ const usePlayerStore = create<PlayerState>((set, get) => ({
     if (status?.isLoaded) {
       try {
         if (status.isPlaying) {
+          get()._savePlayRecord({}, { immediate: true });
           await videoRef?.current?.pauseAsync();
         } else {
           await videoRef?.current?.playAsync();
@@ -407,8 +409,6 @@ const usePlayerStore = create<PlayerState>((set, get) => ({
     }
 
     if (detail && newStatus.durationMillis) {
-      get()._savePlayRecord();
-
       const isNearEnd = newStatus.positionMillis / newStatus.durationMillis > 0.95;
       if (isNearEnd && currentEpisodeIndex < episodes.length - 1 && !outroStartTime) {
         set({ showNextEpisodeOverlay: true });
@@ -418,6 +418,7 @@ const usePlayerStore = create<PlayerState>((set, get) => ({
     }
 
     if (newStatus.didJustFinish) {
+      get()._savePlayRecord({}, { immediate: true });
       if (currentEpisodeIndex < episodes.length - 1) {
         playEpisode(currentEpisodeIndex + 1);
       }

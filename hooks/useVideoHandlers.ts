@@ -30,7 +30,7 @@ export const useVideoHandlers = ({
   const onLoad = useCallback(async () => {
     try {
       // Lower callback frequency to reduce JS load on TV chipsets.
-      await videoRef.current?.setProgressUpdateIntervalAsync(deviceType === 'tv' ? 2000 : 1000);
+      await videoRef.current?.setProgressUpdateIntervalAsync(deviceType === 'tv' ? 5000 : 1000);
 
       const jumpPosition = initialPosition || introEndTime || 0;
       if (jumpPosition > 0) {
